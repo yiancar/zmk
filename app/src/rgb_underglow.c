@@ -24,6 +24,7 @@
 #include <zmk/event_manager.h>
 #include <zmk/events/activity_state_changed.h>
 #include <zmk/events/usb_conn_state_changed.h>
+#include <zmk/events/rgb_underglow_tick.h>
 #include <zmk/workqueue.h>
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
@@ -50,14 +51,6 @@ enum rgb_underglow_effect {
     UNDERGLOW_EFFECT_SPECTRUM,
     UNDERGLOW_EFFECT_SWIRL,
     UNDERGLOW_EFFECT_NUMBER // Used to track number of underglow effects
-};
-
-struct rgb_underglow_state {
-    struct zmk_led_hsb color;
-    uint8_t animation_speed;
-    uint8_t current_effect;
-    uint16_t animation_step;
-    bool on;
 };
 
 static const struct device *led_strip;
@@ -190,6 +183,10 @@ static void zmk_rgb_underglow_tick(struct k_work *work) {
         zmk_rgb_underglow_effect_swirl();
         break;
     }
+
+    struct zmk_rgb_underglow_tick_event tick_ev = {.pixels = pixels, .state = state};
+
+    raise_zmk_rgb_underglow_tick_event(tick_ev);
 
     int err = led_strip_update_rgb(led_strip, pixels, STRIP_NUM_PIXELS);
     if (err < 0) {
