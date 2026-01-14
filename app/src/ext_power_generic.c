@@ -41,7 +41,13 @@ static void ext_power_save_state_work(struct k_work *work) {
     struct ext_power_generic_data *data = ext_power->data;
 
     snprintf(setting_path, sizeof(setting_path), "ext_power/state/%s", ext_power->name);
-    settings_save_one(setting_path, &data->status, sizeof(data->status));
+    LOG_INF("EXT_POWER settings: saving state=%d to \"%s\"", data->status, setting_path);
+    int rc = settings_save_one(setting_path, &data->status, sizeof(data->status));
+    if (rc) {
+        LOG_ERR("EXT_POWER settings: save failed (%d)", rc);
+    } else {
+        LOG_INF("EXT_POWER settings: save complete");
+    }
 }
 
 static struct k_work_delayable ext_power_save_work;
@@ -50,6 +56,8 @@ static struct k_work_delayable ext_power_save_work;
 int ext_power_save_state(void) {
 #if IS_ENABLED(CONFIG_SETTINGS)
     int ret = k_work_reschedule(&ext_power_save_work, K_MSEC(CONFIG_ZMK_SETTINGS_SAVE_DEBOUNCE));
+    LOG_INF("EXT_POWER settings: schedule save in %d ms (ret=%d)", CONFIG_ZMK_SETTINGS_SAVE_DEBOUNCE,
+            ret);
     return MIN(ret, 0);
 #else
     return 0;
