@@ -351,13 +351,9 @@ static int zmk_rgb_underglow_off_with_persist(bool persist_state) {
     return persist_state ? zmk_rgb_underglow_save_state() : 0;
 }
 
-int zmk_rgb_underglow_on(void) {
-    return zmk_rgb_underglow_on_with_persist(true);
-}
+int zmk_rgb_underglow_on(void) { return zmk_rgb_underglow_on_with_persist(true); }
 
-int zmk_rgb_underglow_off(void) {
-    return zmk_rgb_underglow_off_with_persist(true);
-}
+int zmk_rgb_underglow_off(void) { return zmk_rgb_underglow_off_with_persist(true); }
 
 int zmk_rgb_underglow_calc_effect(int direction) {
     return (state.current_effect + UNDERGLOW_EFFECT_NUMBER + direction) % UNDERGLOW_EFFECT_NUMBER;
@@ -392,7 +388,7 @@ int zmk_rgb_underglow_set_hsb(struct zmk_led_hsb color) {
 
     state.color = color;
 
-    return 0;
+    return zmk_rgb_underglow_save_state();
 }
 
 struct zmk_led_hsb zmk_rgb_underglow_calc_hue(int direction) {
