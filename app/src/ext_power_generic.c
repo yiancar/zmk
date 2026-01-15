@@ -34,6 +34,8 @@ struct ext_power_generic_data {
 #endif
 };
 
+static bool ext_power_persist_enabled = true;
+
 #if IS_ENABLED(CONFIG_SETTINGS)
 static void ext_power_save_state_work(struct k_work *work) {
     char setting_path[40];
@@ -55,6 +57,12 @@ static struct k_work_delayable ext_power_save_work;
 
 int ext_power_save_state(void) {
 #if IS_ENABLED(CONFIG_SETTINGS)
+    if (!ext_power_persist_enabled) {
+        LOG_DBG("EXT_POWER settings: skipping save (non-persistent change)");
+        k_work_cancel_delayable(&ext_power_save_work);
+        return 0;
+    }
+
     int ret = k_work_reschedule(&ext_power_save_work, K_MSEC(CONFIG_ZMK_SETTINGS_SAVE_DEBOUNCE));
     LOG_INF("EXT_POWER settings: schedule save in %d ms (ret=%d)", CONFIG_ZMK_SETTINGS_SAVE_DEBOUNCE,
             ret);
@@ -97,6 +105,22 @@ static int ext_power_generic_disable(const struct device *dev) {
 static int ext_power_generic_get(const struct device *dev) {
     struct ext_power_generic_data *data = dev->data;
     return data->status;
+}
+
+int ext_power_enable_with_persist(const struct device *dev, bool persist_state) {
+    bool previous = ext_power_persist_enabled;
+    ext_power_persist_enabled = persist_state;
+    int rc = ext_power_enable(dev);
+    ext_power_persist_enabled = previous;
+    return rc;
+}
+
+int ext_power_disable_with_persist(const struct device *dev, bool persist_state) {
+    bool previous = ext_power_persist_enabled;
+    ext_power_persist_enabled = persist_state;
+    int rc = ext_power_disable(dev);
+    ext_power_persist_enabled = previous;
+    return rc;
 }
 
 #if IS_ENABLED(CONFIG_SETTINGS)
@@ -171,7 +195,7 @@ static int ext_power_generic_init(const struct device *dev) {
 #endif
 
     // Enable by default. We may get disabled again once settings load.
-    ext_power_enable(dev);
+    ext_power_enable_with_persist(dev, false);
 
     if (config->init_delay_ms) {
         k_msleep(config->init_delay_ms);

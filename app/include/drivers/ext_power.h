@@ -97,6 +97,9 @@ static inline int z_impl_ext_power_get(const struct device *dev) {
 }
 #endif
 
+int ext_power_enable_with_persist(const struct device *dev, bool persist_state);
+int ext_power_disable_with_persist(const struct device *dev, bool persist_state);
+
 /**
  * @}
  */
