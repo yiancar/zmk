@@ -64,8 +64,8 @@ int ext_power_save_state(void) {
     }
 
     int ret = k_work_reschedule(&ext_power_save_work, K_MSEC(CONFIG_ZMK_SETTINGS_SAVE_DEBOUNCE));
-    LOG_INF("EXT_POWER settings: schedule save in %d ms (ret=%d)", CONFIG_ZMK_SETTINGS_SAVE_DEBOUNCE,
-            ret);
+    LOG_INF("EXT_POWER settings: schedule save in %d ms (ret=%d)",
+            CONFIG_ZMK_SETTINGS_SAVE_DEBOUNCE, ret);
     return MIN(ret, 0);
 #else
     return 0;
@@ -166,9 +166,8 @@ static int ext_power_settings_commit() {
     if (!data->settings_init) {
 
         data->status = true;
-        k_work_schedule(&ext_power_save_work, K_NO_WAIT);
-
-        ext_power_enable(dev);
+        /* First boot with no saved state: enable without scheduling a save. */
+        ext_power_enable_with_persist(dev, false);
     }
 
     return 0;
