@@ -20,7 +20,7 @@ permissions: {}
 
 jobs:
   build:
-    if: ${{ always() }}
+    if: ${{ github.event_name != 'schedule' || github.repository_owner == 'zmkfirmware' }}
     runs-on: ubuntu-latest
     container:
       image: docker.io/zmkfirmware/zmk-build-arm:4.1
