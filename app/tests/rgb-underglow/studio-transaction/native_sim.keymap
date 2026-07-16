@@ -39,6 +39,7 @@
         ZMK_MOCK_PRESS(1,0,10)
         ZMK_MOCK_RELEASE(1,0,10)
         ZMK_MOCK_PRESS(1,1,10)
-        ZMK_MOCK_RELEASE(1,1,10)
+        /* Allow the dedicated settings test thread to complete before exit-after stops the sim. */
+        ZMK_MOCK_RELEASE(1,1,1000)
     >;
 };

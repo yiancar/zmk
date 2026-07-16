@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include <zephyr/device.h>
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/settings/settings.h>
 
@@ -395,6 +396,33 @@ static void test_rpc_validation(void) {
 }
 #endif
 
+#define EXTENDED_TEST_STACK_SIZE 4096
+
+K_THREAD_STACK_DEFINE(extended_test_stack, EXTENDED_TEST_STACK_SIZE);
+static struct k_thread extended_test_thread;
+
+static void run_extended_tests(void *unused1, void *unused2, void *unused3) {
+    ARG_UNUSED(unused1);
+    ARG_UNUSED(unused2);
+    ARG_UNUSED(unused3);
+
+    /* These tests flush system work, so they cannot run from the kscan mock's system work item. */
+    test_auto_off_not_persisted();
+#if IS_ENABLED(CONFIG_SETTINGS_CUSTOM)
+    test_persistence_writes();
+#endif
+    test_effective_output();
+#if IS_ENABLED(CONFIG_ZMK_STUDIO_RPC) || IS_ENABLED(CONFIG_ZMK_TEST_STUDIO_LIGHTING)
+    test_rpc_validation();
+#endif
+}
+
+static void start_extended_tests(void) {
+    k_thread_create(&extended_test_thread, extended_test_stack,
+                    K_THREAD_STACK_SIZEOF(extended_test_stack), run_extended_tests, NULL, NULL,
+                    NULL, K_PRIO_PREEMPT(0), 0, K_NO_WAIT);
+}
+
 static int on_rgb_underglow_test_pressed(struct zmk_behavior_binding *binding,
                                          struct zmk_behavior_binding_event event) {
     switch (binding->param1) {
@@ -410,14 +438,7 @@ static int on_rgb_underglow_test_pressed(struct zmk_behavior_binding *binding,
     case 3:
         test_invalid_preview();
         test_wide_value_validation();
-        test_auto_off_not_persisted();
-#if IS_ENABLED(CONFIG_SETTINGS_CUSTOM)
-        test_persistence_writes();
-#endif
-        test_effective_output();
-#if IS_ENABLED(CONFIG_ZMK_STUDIO_RPC) || IS_ENABLED(CONFIG_ZMK_TEST_STUDIO_LIGHTING)
-        test_rpc_validation();
-#endif
+        start_extended_tests();
         break;
     default:
         return -EINVAL;
