@@ -3,5 +3,7 @@ config ZMK_TEST_BEHAVIORS
 
 config ZMK_TEST_STUDIO_LIGHTING
     bool "Include the Studio lighting RPC handler for native tests"
-    depends on ZMK_TEST_BEHAVIORS && ZMK_RGB_UNDERGLOW
+    depends on ZMK_TEST_BEHAVIORS && ZMK_RGB_UNDERGLOW && SETTINGS
     select NANOPB
+    select ZMK_BEHAVIOR_LOCAL_IDS
+    select ZMK_KEYMAP_SETTINGS_STORAGE
