@@ -104,6 +104,7 @@ target_sources_ifdef(CONFIG_USB_DEVICE_STACK app PRIVATE src/usb.c)
 target_sources_ifdef(CONFIG_ZMK_USB app PRIVATE src/usb_hid.c)
 target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/rgb_underglow.c)
 target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/events/rgb_underglow_tick.c)
+target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE src/events/rgb_underglow_state_changed.c)
 target_sources_ifdef(CONFIG_ZMK_BACKLIGHT app PRIVATE src/backlight.c)
 target_sources_ifdef(CONFIG_ZMK_LOW_PRIORITY_WORK_QUEUE app PRIVATE src/workqueue.c)
 target_sources(app PRIVATE src/main.c)
@@ -126,6 +127,7 @@ if (CONFIG_ZMK_STUDIO_RPC)
                         ${ZEPHYR_ZMK_STUDIO_MESSAGES_MODULE_DIR}/proto/zmk/core.proto
                         ${ZEPHYR_ZMK_STUDIO_MESSAGES_MODULE_DIR}/proto/zmk/behaviors.proto
                         ${ZEPHYR_ZMK_STUDIO_MESSAGES_MODULE_DIR}/proto/zmk/keymap.proto
+                        ${ZEPHYR_ZMK_STUDIO_MESSAGES_MODULE_DIR}/proto/zmk/lighting.proto
   )
 
   target_include_directories(app PUBLIC ${CMAKE_CURRENT_BINARY_DIR})

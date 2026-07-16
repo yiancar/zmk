@@ -4,6 +4,8 @@ manifest:
       url-base: https://github.com/zephyrproject-rtos
     - name: zmkfirmware
       url-base: https://github.com/zmkfirmware
+    - name: yiancar
+      url-base: https://github.com/yiancar
   projects:
     - name: zephyr
       remote: zmkfirmware
@@ -39,9 +41,9 @@ manifest:
       path: modules/lib/gui/lvgl
       remote: zmkfirmware
     - name: zmk-studio-messages
-      revision: 6cb4c283e76209d59c45fbcb218800cd19e9339d
+      revision: 5a43966b83e3b27903c13be713b881766e47f58a
       path: modules/msgs/zmk-studio-messages
-      remote: zmkfirmware
+      remote: yiancar
   group-filter: [+optional]
   self:
     west-commands: scripts/west-commands.yml
