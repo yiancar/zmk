@@ -3,4 +3,5 @@ if (((NOT CONFIG_ZMK_SPLIT) OR CONFIG_ZMK_SPLIT_ROLE_CENTRAL) AND CONFIG_ZMK_TES
   target_sources(app PRIVATE behavior_move_layer.c)
   target_sources(app PRIVATE behavior_remove_layer.c)
   target_sources(app PRIVATE behavior_set_layer_binding_at_idx.c)
+  target_sources_ifdef(CONFIG_ZMK_RGB_UNDERGLOW app PRIVATE behavior_rgb_underglow_test.c)
 endif()

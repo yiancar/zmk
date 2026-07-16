@@ -1,0 +1,11 @@
+description: Mock LED strip used by native ZMK tests
+
+compatible: "zmk,led-strip-mock"
+
+include: base.yaml
+
+properties:
+  chain-length:
+    type: int
+    required: true
+    description: Number of RGB pixels exposed by the mock strip

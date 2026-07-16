@@ -1,0 +1,6 @@
+RGB transaction discard: PASS
+RGB transaction save: PASS
+RGB transaction physical-discard: PASS
+RGB transaction validation: PASS
+RGB transaction wide-validation: PASS
+RGB transaction auto-off-save: PASS

@@ -1,0 +1,5 @@
+description: Test-only RGB underglow transaction action
+
+compatible: "zmk,behavior-rgb-underglow-test"
+
+include: one_param.yaml

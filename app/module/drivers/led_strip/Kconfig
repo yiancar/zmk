@@ -1,0 +1,13 @@
+# Copyright (c) 2026 The ZMK Contributors
+# SPDX-License-Identifier: MIT
+
+if LED_STRIP
+
+config ZMK_LED_STRIP_MOCK
+    bool "Mock LED strip"
+    default y
+    depends on DT_HAS_ZMK_LED_STRIP_MOCK_ENABLED
+    help
+      Enable the LED strip mock used by native ZMK tests.
+
+endif

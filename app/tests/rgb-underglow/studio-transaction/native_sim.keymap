@@ -1,0 +1,44 @@
+#include <behaviors.dtsi>
+#include <dt-bindings/zmk/kscan_mock.h>
+
+/ {
+    chosen {
+        zmk,underglow = &led_strip_mock;
+    };
+
+    led_strip_mock: led_strip_mock {
+        compatible = "zmk,led-strip-mock";
+        chain-length = <4>;
+    };
+
+    behaviors {
+        rgb_test: rgb_test {
+            compatible = "zmk,behavior-rgb-underglow-test";
+            #binding-cells = <1>;
+        };
+    };
+
+    keymap {
+        compatible = "zmk,keymap";
+
+        default_layer {
+            bindings = <
+                &rgb_test 0 &rgb_test 1
+                &rgb_test 2 &rgb_test 3
+            >;
+        };
+    };
+};
+
+&kscan {
+    events = <
+        ZMK_MOCK_PRESS(0,0,10)
+        ZMK_MOCK_RELEASE(0,0,10)
+        ZMK_MOCK_PRESS(0,1,10)
+        ZMK_MOCK_RELEASE(0,1,10)
+        ZMK_MOCK_PRESS(1,0,10)
+        ZMK_MOCK_RELEASE(1,0,10)
+        ZMK_MOCK_PRESS(1,1,10)
+        ZMK_MOCK_RELEASE(1,1,10)
+    >;
+};
