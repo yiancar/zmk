@@ -17,7 +17,9 @@
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
+#if IS_ENABLED(CONFIG_ZMK_STUDIO_RPC)
 ZMK_RPC_SUBSYSTEM(lighting)
+#endif
 
 #define LIGHTING_RESPONSE(type, ...) ZMK_RPC_RESPONSE(lighting, type, __VA_ARGS__)
 #define LIGHTING_NOTIFICATION(type, ...) ZMK_RPC_NOTIFICATION(lighting, type, __VA_ARGS__)
@@ -200,6 +202,7 @@ ZMK_RPC_SUBSYSTEM_HANDLER(lighting, check_unsaved_changes, ZMK_STUDIO_RPC_HANDLE
 ZMK_RPC_SUBSYSTEM_HANDLER(lighting, save_changes, ZMK_STUDIO_RPC_HANDLER_SECURED);
 ZMK_RPC_SUBSYSTEM_HANDLER(lighting, discard_changes, ZMK_STUDIO_RPC_HANDLER_SECURED);
 
+#if IS_ENABLED(CONFIG_ZMK_STUDIO_RPC)
 ZMK_RPC_SUBSYSTEM_SETTINGS_RESET(lighting, zmk_rgb_underglow_reset_settings);
 
 static int lighting_event_mapper(const zmk_event_t *eh, zmk_studio_Notification *notification) {
@@ -224,3 +227,4 @@ static int lighting_event_mapper(const zmk_event_t *eh, zmk_studio_Notification 
 
 ZMK_RPC_EVENT_MAPPER(lighting, lighting_event_mapper, zmk_rgb_underglow_state_changed,
                      zmk_rgb_underglow_unsaved_changes_changed);
+#endif

@@ -112,7 +112,7 @@ target_sources(app PRIVATE src/main.c)
 add_subdirectory(src/display/)
 add_subdirectory_ifdef(CONFIG_SETTINGS src/settings/)
 
-if (CONFIG_ZMK_STUDIO_RPC)
+if (CONFIG_ZMK_STUDIO_RPC OR CONFIG_ZMK_TEST_STUDIO_LIGHTING)
   # For some reason this is failing if run from a different sub-file.
   list(APPEND CMAKE_MODULE_PATH ${ZEPHYR_BASE}/modules/nanopb)
 
@@ -133,7 +133,12 @@ if (CONFIG_ZMK_STUDIO_RPC)
   target_include_directories(app PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
   target_sources(app PRIVATE ${proto_srcs} ${proto_hdrs})
 
-  add_subdirectory(src/studio)
+  if (CONFIG_ZMK_STUDIO_RPC)
+    add_subdirectory(src/studio)
+  else()
+    zephyr_linker_sources(SECTIONS include/linker/zmk-rpc-subsystem-handlers.ld)
+    target_sources(app PRIVATE src/studio/lighting_subsystem.c)
+  endif()
 endif()
 
 zephyr_cc_option(-Wfatal-errors)

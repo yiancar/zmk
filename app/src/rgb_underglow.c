@@ -884,6 +884,21 @@ static int set_auto_off_reason(enum rgb_underglow_auto_off_reason reason, bool a
 int zmk_rgb_underglow_test_set_auto_off_idle(bool active) {
     return set_auto_off_reason(RGB_UNDERGLOW_AUTO_OFF_IDLE, active);
 }
+
+int zmk_rgb_underglow_test_set_auto_off_usb(bool active) {
+    return set_auto_off_reason(RGB_UNDERGLOW_AUTO_OFF_USB, active);
+}
+
+int zmk_rgb_underglow_test_get_output_state(bool *on) {
+    if (!on) {
+        return -EINVAL;
+    }
+
+    k_mutex_lock(&underglow_state_mutex, K_FOREVER);
+    *on = output_on;
+    k_mutex_unlock(&underglow_state_mutex);
+    return 0;
+}
 #endif
 
 #if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_IDLE) ||                                          \

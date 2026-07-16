@@ -4,3 +4,6 @@ RGB transaction physical-discard: PASS
 RGB transaction validation: PASS
 RGB transaction wide-validation: PASS
 RGB transaction auto-off-save: PASS
+RGB transaction persistence: PASS
+RGB transaction effective-output: PASS
+RGB transaction rpc-validation: PASS

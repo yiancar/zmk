@@ -1,2 +1,7 @@
 config ZMK_TEST_BEHAVIORS
     bool "Include behaviors used for testing purposes"
+
+config ZMK_TEST_STUDIO_LIGHTING
+    bool "Include the Studio lighting RPC handler for native tests"
+    depends on ZMK_TEST_BEHAVIORS && ZMK_RGB_UNDERGLOW
+    select NANOPB
