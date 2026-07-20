@@ -20,7 +20,7 @@ permissions: {}
 
 jobs:
   build:
-    if: ${{ always() }}
+    if: ${{ github.event_name != 'schedule' || github.repository_owner == 'zmkfirmware' }}
     runs-on: ubuntu-latest
     container:
       image: docker.io/zmkfirmware/zmk-build-arm:4.1
@@ -34,7 +34,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Cache west modules
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         env:
           cache-name: cache-zephyr-modules
         with:
@@ -57,7 +57,7 @@ jobs:
       - name: Export Zephyr CMake package (west zephyr-export)
         run: west zephyr-export
       - name: Use Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: "14.x"
       - name: Install @actions/artifact
@@ -191,7 +191,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Use Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: "14.x"
       - name: Install js-yaml
@@ -220,7 +220,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
       - name: Use Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: "14.x"
       - name: Install js-yaml
@@ -350,7 +350,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Use Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: "14.x"
       - name: Install js-yaml
