@@ -216,6 +216,13 @@ zmk_studio_Response zmk_rpc_subsystem_delegate_to_subs(const struct zmk_rpc_subs
                                                        uint8_t which_req);
 
 struct ring_buf *zmk_rpc_get_tx_buf(void);
+/**
+ * @brief Notify the RPC producer that a transport released space in the TX buffer.
+ *
+ * Every transport must call this after consuming bytes from, or resetting, the shared TX ring.
+ * The producer may be sleeping while a response larger than the ring is streamed.
+ */
+void zmk_rpc_tx_notify_space_available(void);
 struct ring_buf *zmk_rpc_get_rx_buf(void);
 void zmk_rpc_rx_notify(void);
 

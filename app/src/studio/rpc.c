@@ -117,10 +117,41 @@ static pb_istream_t pb_istream_for_rx_ring_buf() {
 
 RING_BUF_DECLARE(rpc_tx_buf, CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE);
 
+static K_SEM_DEFINE(rpc_tx_space_sem, 0, 1);
+
 struct ring_buf *zmk_rpc_get_tx_buf(void) { return &rpc_tx_buf; }
 
+void zmk_rpc_tx_notify_space_available(void) { k_sem_give(&rpc_tx_space_sem); }
+
+struct rpc_tx_context {
+    void *transport_user_data;
+    int64_t progress_deadline;
+    int err;
+};
+
+static void rpc_tx_mark_progress(struct rpc_tx_context *ctx) {
+    ctx->progress_deadline = k_uptime_get() + CONFIG_ZMK_STUDIO_RPC_TX_TIMEOUT_MS;
+}
+
+static bool rpc_tx_wait_for_space(struct rpc_tx_context *ctx) {
+    // Ensure a transport that only starts draining on demand has been kicked before sleeping.
+    selected_transport->tx_notify(&rpc_tx_buf, 0, false, ctx->transport_user_data);
+
+    while (ring_buf_space_get(&rpc_tx_buf) == 0) {
+        int64_t remaining = ctx->progress_deadline - k_uptime_get();
+        if (remaining <= 0) {
+            ctx->err = -ETIMEDOUT;
+            return false;
+        }
+
+        k_sem_take(&rpc_tx_space_sem, K_MSEC(MIN(remaining, 100)));
+    }
+
+    return true;
+}
+
 static bool rpc_tx_buffer_write(pb_ostream_t *stream, const uint8_t *buf, size_t count) {
-    void *user_data = stream->state;
+    struct rpc_tx_context *ctx = stream->state;
     size_t written = 0;
 
     bool escape_byte_already_written = false;
@@ -131,6 +162,9 @@ static bool rpc_tx_buffer_write(pb_ostream_t *stream, const uint8_t *buf, size_t
         uint32_t claim_len = ring_buf_put_claim(&rpc_tx_buf, &write_buf, count - written);
 
         if (claim_len == 0) {
+            if (!rpc_tx_wait_for_space(ctx)) {
+                return false;
+            }
             continue;
         }
 
@@ -165,32 +199,52 @@ static bool rpc_tx_buffer_write(pb_ostream_t *stream, const uint8_t *buf, size_t
 
         written += (write_idx - escapes_written);
 
-        selected_transport->tx_notify(&rpc_tx_buf, write_idx, false, user_data);
+        rpc_tx_mark_progress(ctx);
+        selected_transport->tx_notify(&rpc_tx_buf, write_idx, false,
+                                      ctx->transport_user_data);
     } while (written < count);
 
     return true;
 }
 
-static pb_ostream_t pb_ostream_for_tx_buf(void *user_data) {
-    pb_ostream_t stream = {&rpc_tx_buffer_write, (void *)user_data, SIZE_MAX, 0};
+static bool rpc_tx_buffer_write_framing_byte(uint8_t framing_byte, struct rpc_tx_context *ctx,
+                                             bool message_done) {
+    while (ring_buf_put(&rpc_tx_buf, &framing_byte, 1) == 0) {
+        if (!rpc_tx_wait_for_space(ctx)) {
+            return false;
+        }
+    }
+
+    rpc_tx_mark_progress(ctx);
+    selected_transport->tx_notify(&rpc_tx_buf, 1, message_done, ctx->transport_user_data);
+    return true;
+}
+
+static pb_ostream_t pb_ostream_for_tx_buf(struct rpc_tx_context *ctx) {
+    pb_ostream_t stream = {&rpc_tx_buffer_write, ctx, SIZE_MAX, 0};
     return stream;
 }
 
 static int send_response(const zmk_studio_Response *resp) {
+    int err = 0;
     k_mutex_lock(&rpc_transport_mutex, K_FOREVER);
 
     if (!selected_transport) {
         goto exit;
     }
 
-    void *user_data = selected_transport->tx_user_data ? selected_transport->tx_user_data() : NULL;
+    struct rpc_tx_context ctx = {
+        .transport_user_data =
+            selected_transport->tx_user_data ? selected_transport->tx_user_data() : NULL,
+    };
+    rpc_tx_mark_progress(&ctx);
 
-    pb_ostream_t stream = pb_ostream_for_tx_buf(user_data);
+    pb_ostream_t stream = pb_ostream_for_tx_buf(&ctx);
 
-    uint8_t framing_byte = FRAMING_SOF;
-    ring_buf_put(&rpc_tx_buf, &framing_byte, 1);
-
-    selected_transport->tx_notify(&rpc_tx_buf, 1, false, user_data);
+    if (!rpc_tx_buffer_write_framing_byte(FRAMING_SOF, &ctx, false)) {
+        err = ctx.err;
+        goto exit;
+    }
 
     /* Now we are ready to encode the message! */
     bool status = pb_encode(&stream, &zmk_studio_Response_msg, resp);
@@ -199,17 +253,17 @@ static int send_response(const zmk_studio_Response *resp) {
 #if !IS_ENABLED(CONFIG_NANOPB_NO_ERRMSG)
         LOG_ERR("Failed to encode the message %s", stream.errmsg);
 #endif // !IS_ENABLED(CONFIG_NANOPB_NO_ERRMSG)
-        return -EINVAL;
+        err = ctx.err ? ctx.err : -EINVAL;
+        goto exit;
     }
 
-    framing_byte = FRAMING_EOF;
-    ring_buf_put(&rpc_tx_buf, &framing_byte, 1);
-
-    selected_transport->tx_notify(&rpc_tx_buf, 1, true, user_data);
+    if (!rpc_tx_buffer_write_framing_byte(FRAMING_EOF, &ctx, true)) {
+        err = ctx.err;
+    }
 
 exit:
     k_mutex_unlock(&rpc_transport_mutex);
-    return 0;
+    return err;
 }
 
 static void rpc_main(void) {

@@ -7,7 +7,6 @@
 #include <zephyr/device.h>
 #include <zephyr/init.h>
 #include <sys/types.h>
-#include <zephyr/sys/atomic.h>
 #include <zephyr/kernel.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/sys/ring_buffer.h>
@@ -26,7 +25,6 @@ LOG_MODULE_DECLARE(zmk_studio, CONFIG_ZMK_STUDIO_LOG_LEVEL);
 static bool handling_rx = false;
 
 static K_SEM_DEFINE(indicate_sem, 1, 1);
-static atomic_t notify_size;
 
 static void rpc_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value) {
     ARG_UNUSED(attr);
@@ -95,28 +93,15 @@ BT_GATT_SERVICE_DEFINE(
     BT_GATT_CCC(rpc_ccc_cfg_changed, BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT));
 
 static uint16_t get_notify_size_for_conn(struct bt_conn *conn) {
-    uint16_t notify_size = 23; // Default MTU size unless negotiated higher
-    struct bt_conn_info conn_info;
-    if (conn && bt_conn_get_info(conn, &conn_info) >= 0) {
-        notify_size = conn_info.le.data_len->tx_max_len;
+    if (!conn) {
+        return 0;
     }
 
-    return notify_size;
-}
-
-static void refresh_notify_size(void) {
-    struct bt_conn *conn = zmk_ble_active_profile_conn();
-
-    uint16_t ns = get_notify_size_for_conn(conn);
-    if (conn) {
-        bt_conn_unref(conn);
-    }
-
-    atomic_set(&notify_size, ns);
+    uint16_t mtu = bt_gatt_get_mtu(conn);
+    return mtu > 3 ? mtu - 3 : 0;
 }
 
 static int gatt_start_rx() {
-    refresh_notify_size();
     handling_rx = true;
     return 0;
 }
@@ -136,6 +121,9 @@ static struct bt_gatt_indicate_params rpc_indicate_params = {
     .func = indicate_cb,
 };
 
+static void notif_rpc_tx_cb(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(notify_tx_work, notif_rpc_tx_cb);
+
 static void notif_rpc_tx_cb(struct k_work *work) {
     struct bt_conn *conn = zmk_ble_active_profile_conn();
     struct ring_buf *tx_buf = zmk_rpc_get_tx_buf();
@@ -143,78 +131,58 @@ static void notif_rpc_tx_cb(struct k_work *work) {
     if (!conn) {
         LOG_WRN("No active connection for queued data, dropping");
         ring_buf_reset(tx_buf);
+        zmk_rpc_tx_notify_space_available();
         return;
     }
 
     uint16_t notify_size = MIN(get_notify_size_for_conn(conn), sizeof(indicate_buffer));
 
-    if (ring_buf_size_get(tx_buf) > 0) {
+    if (notify_size > 0 && ring_buf_size_get(tx_buf) > 0) {
         int ret = k_sem_take(&indicate_sem, K_NO_WAIT);
         if (ret < 0) {
             return;
         }
 
-        uint16_t added = 0;
-        while (added < notify_size && ring_buf_size_get(tx_buf) > 0) {
-            uint8_t *buf;
-            int len = ring_buf_get_claim(tx_buf, &buf, notify_size - added);
-
-            memcpy(indicate_buffer + added, buf, len);
-
-            added += len;
-            ring_buf_get_finish(tx_buf, len);
+        uint8_t *buf;
+        uint32_t claim_len = ring_buf_get_claim(tx_buf, &buf, notify_size);
+        if (claim_len == 0) {
+            k_sem_give(&indicate_sem);
+            bt_conn_unref(conn);
+            return;
         }
 
-        rpc_indicate_params.len = added;
+        memcpy(indicate_buffer, buf, claim_len);
+        rpc_indicate_params.len = claim_len;
 
         int err = bt_gatt_indicate(conn, &rpc_indicate_params);
         if (err < 0) {
             LOG_WRN("Failed to notify the response %d", err);
+            ring_buf_get_finish(tx_buf, 0);
             k_sem_give(&indicate_sem);
+            k_work_reschedule(&notify_tx_work, K_MSEC(10));
+        } else {
+            ring_buf_get_finish(tx_buf, claim_len);
+            zmk_rpc_tx_notify_space_available();
         }
     }
 
     bt_conn_unref(conn);
 }
 
-static K_WORK_DEFINE(notify_tx_work, notif_rpc_tx_cb);
-
-struct gatt_write_state {
-    size_t pending_notify;
-};
-
 static void indicate_cb(struct bt_conn *conn, struct bt_gatt_indicate_params *params, uint8_t err) {
     k_sem_give(&indicate_sem);
-    k_work_submit(&notify_tx_work);
+    k_work_reschedule(&notify_tx_work, K_NO_WAIT);
 }
 
 static void gatt_tx_notify(struct ring_buf *tx_buf, size_t added, bool msg_done, void *user_data) {
-    struct gatt_write_state *state = (struct gatt_write_state *)user_data;
-
-    state->pending_notify += added;
-
-    atomic_t ns = atomic_get(&notify_size);
-
-    if (msg_done || state->pending_notify > ns) {
-        k_work_submit(&notify_tx_work);
-        state->pending_notify = 0;
+    if (added > 0 || msg_done) {
+        k_work_reschedule(&notify_tx_work, K_NO_WAIT);
     }
 }
 
-static struct gatt_write_state tx_state = {};
-
-static void *gatt_tx_user_data(void) {
-    memset(&tx_state, 0, sizeof(tx_state));
-
-    return &tx_state;
-}
-
-ZMK_RPC_TRANSPORT(gatt, ZMK_TRANSPORT_BLE, gatt_start_rx, gatt_stop_rx, gatt_tx_user_data,
-                  gatt_tx_notify);
+ZMK_RPC_TRANSPORT(gatt, ZMK_TRANSPORT_BLE, gatt_start_rx, gatt_stop_rx, NULL, gatt_tx_notify);
 
 static int gatt_rpc_listener(const zmk_event_t *eh) {
-    refresh_notify_size();
-
 #if IS_ENABLED(CONFIG_ZMK_STUDIO_LOCK_ON_DISCONNECT)
     struct bt_conn *conn = zmk_ble_active_profile_conn();
 

@@ -109,6 +109,14 @@ config ZMK_STUDIO_RPC_TX_BUF_SIZE
     int "TX Buffer Size"
     default 64
 
+config ZMK_STUDIO_RPC_TX_TIMEOUT_MS
+    int "TX progress timeout in milliseconds"
+    default 2000
+    help
+      Abort encoding a response if the selected transport cannot release any
+      TX buffer space within this interval. The timeout restarts whenever the
+      producer writes more response data.
+
 endif
 
 endif

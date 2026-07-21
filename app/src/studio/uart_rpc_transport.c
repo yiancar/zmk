@@ -35,6 +35,7 @@ static void tx_notify(struct ring_buf *tx_ring_buf, size_t written, bool msg_don
             }
 
             ring_buf_get_finish(tx_buf, claim_len);
+            zmk_rpc_tx_notify_space_available();
         }
 #endif
     }
@@ -135,7 +136,17 @@ static void serial_cb(const struct device *dev, void *user_data) {
 
             int sent = uart_fifo_fill(uart_dev, buf, claim_len);
 
-            ring_buf_get_finish(tx_buf, MAX(sent, 0));
+            if (sent <= 0) {
+                ring_buf_get_finish(tx_buf, 0);
+                break;
+            }
+
+            ring_buf_get_finish(tx_buf, sent);
+            zmk_rpc_tx_notify_space_available();
+        }
+
+        if (ring_buf_size_get(tx_buf) == 0) {
+            uart_irq_tx_disable(uart_dev);
         }
     }
 }
