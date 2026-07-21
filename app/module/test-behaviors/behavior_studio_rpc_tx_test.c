@@ -133,8 +133,7 @@ static int send_test_request(void) {
     zmk_studio_Request request = zmk_studio_Request_init_zero;
     request.request_id = TEST_REQUEST_ID;
     request.which_subsystem = zmk_studio_Request_behaviors_tag;
-    request.subsystem.behaviors.which_request_type =
-        zmk_behaviors_Request_list_all_behaviors_tag;
+    request.subsystem.behaviors.which_request_type = zmk_behaviors_Request_list_all_behaviors_tag;
     request.subsystem.behaviors.request_type.list_all_behaviors = true;
 
     uint8_t request_buffer[32];

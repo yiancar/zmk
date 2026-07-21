@@ -200,8 +200,7 @@ static bool rpc_tx_buffer_write(pb_ostream_t *stream, const uint8_t *buf, size_t
         written += (write_idx - escapes_written);
 
         rpc_tx_mark_progress(ctx);
-        selected_transport->tx_notify(&rpc_tx_buf, write_idx, false,
-                                      ctx->transport_user_data);
+        selected_transport->tx_notify(&rpc_tx_buf, write_idx, false, ctx->transport_user_data);
     } while (written < count);
 
     return true;
