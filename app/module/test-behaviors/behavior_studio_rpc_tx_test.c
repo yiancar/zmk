@@ -55,18 +55,26 @@ static void validate_response(void) {
         .arg = &behavior_count;
 
     pb_istream_t stream = pb_istream_from_buffer(response_buffer, response_len);
-    bool passed = pb_decode(&stream, &zmk_studio_Response_msg, &response);
-    passed = passed && response.which_type == zmk_studio_Response_request_response_tag;
-    passed = passed && response.type.request_response.request_id == TEST_REQUEST_ID;
-    passed = passed && response.type.request_response.which_subsystem ==
-                           zmk_studio_RequestResponse_behaviors_tag;
-    passed = passed && response.type.request_response.subsystem.behaviors.which_response_type ==
-                           zmk_behaviors_Response_list_all_behaviors_tag;
-    passed = passed && behavior_count > 0;
-    passed = passed && raw_response_len > CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE;
-    passed = passed && saw_escaped_byte;
+    bool decoded = pb_decode(&stream, &zmk_studio_Response_msg, &response);
+    bool response_type_ok = response.which_type == zmk_studio_Response_request_response_tag;
+    bool request_id_ok = response.type.request_response.request_id == TEST_REQUEST_ID;
+    bool subsystem_ok =
+        response.type.request_response.which_subsystem == zmk_studio_RequestResponse_behaviors_tag;
+    bool behavior_response_ok =
+        response.type.request_response.subsystem.behaviors.which_response_type ==
+        zmk_behaviors_Response_list_all_behaviors_tag;
+    bool passed = decoded && response_type_ok && request_id_ok && subsystem_ok &&
+                  behavior_response_ok && behavior_count > 0 &&
+                  raw_response_len > CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE && saw_escaped_byte;
 
-    LOG_INF("Studio RPC TX streaming: %s", passed ? "PASS" : "FAIL");
+    if (passed) {
+        LOG_INF("Studio RPC TX streaming: PASS");
+    } else {
+        LOG_INF("Studio RPC TX streaming: FAIL decoded=%d type=%d request=%d subsystem=%d "
+                "behavior_response=%d behaviors=%zu raw=%zu escaped=%d",
+                decoded, response_type_ok, request_id_ok, subsystem_ok, behavior_response_ok,
+                behavior_count, raw_response_len, saw_escaped_byte);
+    }
 }
 
 static void capture_response_byte(uint8_t byte) {
