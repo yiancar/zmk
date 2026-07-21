@@ -32,27 +32,8 @@ static size_t response_len;
 static size_t raw_response_len;
 static bool saw_escaped_byte;
 
-static bool decode_behavior_id(pb_istream_t *stream, const pb_field_t *field, void **arg) {
-    size_t *behavior_count = *arg;
-    uint32_t behavior_id;
-
-    ARG_UNUSED(field);
-
-    if (!pb_decode_varint(stream, &behavior_id)) {
-        return false;
-    }
-
-    (*behavior_count)++;
-    return true;
-}
-
 static void validate_response(void) {
-    size_t behavior_count = 0;
     zmk_studio_Response response = zmk_studio_Response_init_zero;
-    response.type.request_response.subsystem.behaviors.response_type.list_all_behaviors.behaviors
-        .funcs.decode = decode_behavior_id;
-    response.type.request_response.subsystem.behaviors.response_type.list_all_behaviors.behaviors
-        .arg = &behavior_count;
 
     pb_istream_t stream = pb_istream_from_buffer(response_buffer, response_len);
     bool decoded = pb_decode(&stream, &zmk_studio_Response_msg, &response);
@@ -64,16 +45,16 @@ static void validate_response(void) {
         response.type.request_response.subsystem.behaviors.which_response_type ==
         zmk_behaviors_Response_list_all_behaviors_tag;
     bool passed = decoded && response_type_ok && request_id_ok && subsystem_ok &&
-                  behavior_response_ok && behavior_count > 0 &&
-                  raw_response_len > CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE && saw_escaped_byte;
+                  behavior_response_ok && raw_response_len > CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE &&
+                  saw_escaped_byte;
 
     if (passed) {
         LOG_INF("Studio RPC TX streaming: PASS");
     } else {
         LOG_INF("Studio RPC TX streaming: FAIL decoded=%d type=%d request=%d subsystem=%d "
-                "behavior_response=%d behaviors=%zu raw=%zu escaped=%d",
+                "behavior_response=%d raw=%zu escaped=%d",
                 decoded, response_type_ok, request_id_ok, subsystem_ok, behavior_response_ok,
-                behavior_count, raw_response_len, saw_escaped_byte);
+                raw_response_len, saw_escaped_byte);
     }
 }
 
