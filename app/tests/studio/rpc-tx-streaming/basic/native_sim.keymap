@@ -38,6 +38,7 @@
 &kscan {
     events = <
         ZMK_MOCK_PRESS(0,0,10)
+        /* Allow the asynchronous test transport to drain and validate the response. */
         ZMK_MOCK_RELEASE(0,0,500)
     >;
 };
