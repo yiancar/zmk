@@ -1,0 +1,5 @@
+description: Test-only Studio RPC TX streaming action
+
+compatible: "zmk,behavior-studio-rpc-tx-test"
+
+include: zero_param.yaml

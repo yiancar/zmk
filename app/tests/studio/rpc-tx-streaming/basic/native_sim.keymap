@@ -1,0 +1,26 @@
+#include <behaviors.dtsi>
+#include <dt-bindings/zmk/kscan_mock.h>
+
+/ {
+    behaviors {
+        studio_rpc_tx_test: rpc_tx_test {
+            compatible = "zmk,behavior-studio-rpc-tx-test";
+            #binding-cells = <0>;
+        };
+    };
+
+    keymap {
+        compatible = "zmk,keymap";
+
+        default_layer {
+            bindings = <&studio_rpc_tx_test>;
+        };
+    };
+};
+
+&kscan {
+    events = <
+        ZMK_MOCK_PRESS(0,0,10)
+        ZMK_MOCK_RELEASE(0,0,500)
+    >;
+};

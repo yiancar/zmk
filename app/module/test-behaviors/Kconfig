@@ -7,3 +7,8 @@ config ZMK_TEST_STUDIO_LIGHTING
     select NANOPB
     select ZMK_BEHAVIOR_LOCAL_IDS
     select ZMK_KEYMAP_SETTINGS_STORAGE
+
+config ZMK_TEST_STUDIO_RPC_TX
+    bool "Exercise Studio RPC TX streaming with a test transport"
+    depends on ZMK_TEST_BEHAVIORS
+    select ZMK_STUDIO
