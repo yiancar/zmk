@@ -1,7 +1,24 @@
 #include <behaviors.dtsi>
 #include <dt-bindings/zmk/kscan_mock.h>
+#include <dt-bindings/zmk/matrix_transform.h>
+#include <physical_layouts.dtsi>
 
 / {
+    physical_layout: physical_layout {
+        compatible = "zmk,physical-layout";
+        display-name = "RPC TX Test Layout";
+        kscan = <&kscan>;
+        transform = <&matrix_transform>;
+        keys = <&key_physical_attrs 100 100 0 0 0 0 0>;
+    };
+
+    matrix_transform: matrix_transform {
+        compatible = "zmk,matrix-transform";
+        columns = <1>;
+        rows = <1>;
+        map = <RC(0,0)>;
+    };
+
     behaviors {
         studio_rpc_tx_test: rpc_tx_test {
             compatible = "zmk,behavior-studio-rpc-tx-test";
