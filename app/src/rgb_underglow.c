@@ -11,6 +11,7 @@
 
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <zephyr/logging/log.h>
 
@@ -67,6 +68,7 @@ enum rgb_underglow_auto_off_reason {
 
 static uint8_t auto_off_reasons;
 static bool output_on;
+static bool output_override;
 
 #if IS_ENABLED(CONFIG_SETTINGS)
 static struct rgb_underglow_state pending_save_state;
@@ -173,7 +175,7 @@ static bool update_transaction_dirty_locked(void) {
 }
 
 static bool update_output_state_locked(bool *target_on) {
-    *target_on = state.on && auto_off_reasons == 0;
+    *target_on = (state.on || output_override) && auto_off_reasons == 0;
     if (*target_on == output_on) {
         return false;
     }
@@ -290,19 +292,23 @@ static void zmk_rgb_underglow_tick(struct k_work *work) {
         return;
     }
 
-    switch (state.current_effect) {
-    case ZMK_RGB_UNDERGLOW_EFFECT_SOLID:
-        zmk_rgb_underglow_effect_solid();
-        break;
-    case ZMK_RGB_UNDERGLOW_EFFECT_BREATHE:
-        zmk_rgb_underglow_effect_breathe();
-        break;
-    case ZMK_RGB_UNDERGLOW_EFFECT_SPECTRUM:
-        zmk_rgb_underglow_effect_spectrum();
-        break;
-    case ZMK_RGB_UNDERGLOW_EFFECT_SWIRL:
-        zmk_rgb_underglow_effect_swirl();
-        break;
+    if (state.on && auto_off_reasons == 0) {
+        switch (state.current_effect) {
+        case ZMK_RGB_UNDERGLOW_EFFECT_SOLID:
+            zmk_rgb_underglow_effect_solid();
+            break;
+        case ZMK_RGB_UNDERGLOW_EFFECT_BREATHE:
+            zmk_rgb_underglow_effect_breathe();
+            break;
+        case ZMK_RGB_UNDERGLOW_EFFECT_SPECTRUM:
+            zmk_rgb_underglow_effect_spectrum();
+            break;
+        case ZMK_RGB_UNDERGLOW_EFFECT_SWIRL:
+            zmk_rgb_underglow_effect_swirl();
+            break;
+        }
+    } else {
+        memset(pixels, 0, sizeof(pixels));
     }
 
     struct rgb_underglow_state tick_state = state;
@@ -436,7 +442,7 @@ static int zmk_rgb_underglow_init(void) {
 #endif
 
     transaction_baseline = state;
-    output_on = state.on && auto_off_reasons == 0;
+    output_on = (state.on || output_override) && auto_off_reasons == 0;
 
 #if IS_ENABLED(CONFIG_SETTINGS)
     pending_save_state = state;
@@ -515,6 +521,24 @@ int zmk_rgb_underglow_get_config(struct zmk_rgb_underglow_config *config) {
     *config = config_from_state(&state);
     k_mutex_unlock(&underglow_state_mutex);
     return 0;
+}
+
+int zmk_rgb_underglow_set_output_override(bool enabled) {
+    if (!led_strip) {
+        return -ENODEV;
+    }
+
+    bool target_on;
+
+    k_mutex_lock(&underglow_transaction_mutex, K_FOREVER);
+    k_mutex_lock(&underglow_state_mutex, K_FOREVER);
+    output_override = enabled;
+    bool output_changed = update_output_state_locked(&target_on);
+    k_mutex_unlock(&underglow_state_mutex);
+    int err = output_changed ? apply_power_state(target_on, false) : 0;
+    k_mutex_unlock(&underglow_transaction_mutex);
+
+    return err;
 }
 
 static int set_on_with_persist(bool on, bool persist) {
@@ -896,6 +920,23 @@ int zmk_rgb_underglow_test_get_output_state(bool *on) {
 
     k_mutex_lock(&underglow_state_mutex, K_FOREVER);
     *on = output_on;
+    k_mutex_unlock(&underglow_state_mutex);
+    return 0;
+}
+
+int zmk_rgb_underglow_test_pixels_are_off(bool *off) {
+    if (!off) {
+        return -EINVAL;
+    }
+
+    *off = true;
+    k_mutex_lock(&underglow_state_mutex, K_FOREVER);
+    for (int i = 0; i < STRIP_NUM_PIXELS; i++) {
+        if (pixels[i].r != 0 || pixels[i].g != 0 || pixels[i].b != 0) {
+            *off = false;
+            break;
+        }
+    }
     k_mutex_unlock(&underglow_state_mutex);
     return 0;
 }

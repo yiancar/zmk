@@ -38,15 +38,26 @@ __weak FUNC_NORETURN void z_sys_poweroff(void) {
 extern int zmk_rgb_underglow_test_set_auto_off_idle(bool active);
 extern int zmk_rgb_underglow_test_set_auto_off_usb(bool active);
 extern int zmk_rgb_underglow_test_get_output_state(bool *on);
+extern int zmk_rgb_underglow_test_pixels_are_off(bool *off);
+#if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_EXT_POWER) && IS_ENABLED(CONFIG_SETTINGS)
+extern int zmk_ext_power_test_flush_save(void);
+#endif
 
 #if IS_ENABLED(CONFIG_SETTINGS_CUSTOM)
 #define RGB_SETTINGS_KEY "rgb/underglow/state"
+#define EXT_POWER_SETTINGS_PREFIX "ext_power/state/"
 
 static struct {
     bool valid;
     struct rgb_underglow_state state;
     uint32_t write_count;
 } settings_test_storage;
+
+static struct {
+    bool valid;
+    bool status;
+    uint32_t write_count;
+} ext_power_test_storage;
 
 static ssize_t settings_test_read(void *cb_arg, void *data, size_t len) {
     const struct rgb_underglow_state *stored = cb_arg;
@@ -71,6 +82,21 @@ static int settings_test_load(struct settings_store *store,
 static int settings_test_save(struct settings_store *store, const char *name, const char *value,
                               size_t val_len) {
     ARG_UNUSED(store);
+
+    if (strncmp(name, EXT_POWER_SETTINGS_PREFIX, strlen(EXT_POWER_SETTINGS_PREFIX)) == 0) {
+        ext_power_test_storage.write_count++;
+        if (!value || val_len == 0) {
+            ext_power_test_storage.valid = false;
+            return 0;
+        }
+        if (val_len != sizeof(ext_power_test_storage.status)) {
+            return -EINVAL;
+        }
+
+        memcpy(&ext_power_test_storage.status, value, val_len);
+        ext_power_test_storage.valid = true;
+        return 0;
+    }
 
     if (strcmp(name, RGB_SETTINGS_KEY) != 0) {
         return 0;
@@ -331,6 +357,64 @@ static void test_effective_output(void) {
     log_result("effective-output", passed);
 }
 
+static void test_output_override(void) {
+    struct zmk_rgb_underglow_config baseline;
+    struct zmk_rgb_underglow_config actual;
+    bool output = false;
+
+    bool passed = zmk_rgb_underglow_test_set_auto_off_idle(false) == 0;
+    passed = zmk_rgb_underglow_test_set_auto_off_usb(false) == 0 && passed;
+    passed = zmk_rgb_underglow_off() == 0 && passed;
+    passed = zmk_rgb_underglow_get_config(&baseline) == 0 && !baseline.on && passed;
+
+#if IS_ENABLED(CONFIG_SETTINGS_CUSTOM)
+    /* Flush the intentional global-off change before measuring runtime-only operations. */
+    passed = zmk_rgb_underglow_preview_config(&baseline) == 0 && passed;
+    passed = zmk_rgb_underglow_discard_preview() == 0 && passed;
+    uint32_t write_count = settings_test_storage.write_count;
+#if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_EXT_POWER)
+    uint32_t ext_power_write_count = ext_power_test_storage.write_count;
+#endif
+#endif
+
+    passed = zmk_rgb_underglow_set_output_override(true) == 0 && passed;
+    passed = zmk_rgb_underglow_test_get_output_state(&output) == 0 && output && passed;
+    k_sleep(K_MSEC(75));
+    bool pixels_off = false;
+    passed = zmk_rgb_underglow_test_pixels_are_off(&pixels_off) == 0 && pixels_off && passed;
+    passed = zmk_rgb_underglow_get_config(&actual) == 0 && configs_equal(&baseline, &actual) &&
+             !zmk_rgb_underglow_has_unsaved_changes() && passed;
+#if IS_ENABLED(CONFIG_SETTINGS_CUSTOM) && IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_EXT_POWER)
+    passed = zmk_ext_power_test_flush_save() == 0 && passed;
+    passed = ext_power_test_storage.write_count == ext_power_write_count + 1 &&
+             ext_power_test_storage.valid && !ext_power_test_storage.status && passed;
+#endif
+
+    passed = zmk_rgb_underglow_test_set_auto_off_idle(true) == 0 && passed;
+    passed = zmk_rgb_underglow_test_get_output_state(&output) == 0 && !output && passed;
+    passed = zmk_rgb_underglow_test_set_auto_off_idle(false) == 0 && passed;
+    passed = zmk_rgb_underglow_test_get_output_state(&output) == 0 && output && passed;
+    passed = zmk_rgb_underglow_test_set_auto_off_usb(true) == 0 && passed;
+    passed = zmk_rgb_underglow_test_get_output_state(&output) == 0 && !output && passed;
+    passed = zmk_rgb_underglow_test_set_auto_off_usb(false) == 0 && passed;
+    passed = zmk_rgb_underglow_test_get_output_state(&output) == 0 && output && passed;
+
+    passed = zmk_rgb_underglow_set_output_override(false) == 0 && passed;
+    passed = zmk_rgb_underglow_test_get_output_state(&output) == 0 && !output && passed;
+    passed = zmk_rgb_underglow_get_config(&actual) == 0 && configs_equal(&baseline, &actual) &&
+             !zmk_rgb_underglow_has_unsaved_changes() && passed;
+#if IS_ENABLED(CONFIG_SETTINGS_CUSTOM)
+    passed = settings_test_storage.write_count == write_count && passed;
+#endif
+
+    /* Leave a predictable desired and effective state for any later checks. */
+    zmk_rgb_underglow_set_output_override(false);
+    zmk_rgb_underglow_test_set_auto_off_idle(false);
+    zmk_rgb_underglow_test_set_auto_off_usb(false);
+    zmk_rgb_underglow_on();
+    log_result("output-override", passed);
+}
+
 #if IS_ENABLED(CONFIG_ZMK_TEST_ACTIVITY) && IS_ENABLED(CONFIG_ZMK_SLEEP)
 static void test_usb_powered_sleep_suppression(void) {
     struct zmk_rgb_underglow_config baseline;
@@ -579,6 +663,7 @@ static void run_extended_tests(void *unused1, void *unused2, void *unused3) {
     test_persistence_writes();
 #endif
     test_effective_output();
+    test_output_override();
 #if IS_ENABLED(CONFIG_ZMK_TEST_ACTIVITY) && IS_ENABLED(CONFIG_ZMK_SLEEP)
     test_usb_powered_sleep_suppression();
 #endif

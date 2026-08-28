@@ -31,6 +31,7 @@ struct ext_power_generic_data {
     bool status;
 #if IS_ENABLED(CONFIG_SETTINGS)
     bool settings_init;
+    bool pending_save_status;
 #endif
 };
 
@@ -41,10 +42,11 @@ static void ext_power_save_state_work(struct k_work *work) {
     char setting_path[40];
     const struct device *ext_power = DEVICE_DT_GET(DT_DRV_INST(0));
     struct ext_power_generic_data *data = ext_power->data;
+    bool status = data->pending_save_status;
 
     snprintf(setting_path, sizeof(setting_path), "ext_power/state/%s", ext_power->name);
-    LOG_INF("EXT_POWER settings: saving state=%d to \"%s\"", data->status, setting_path);
-    int rc = settings_save_one(setting_path, &data->status, sizeof(data->status));
+    LOG_INF("EXT_POWER settings: saving state=%d to \"%s\"", status, setting_path);
+    int rc = settings_save_one(setting_path, &status, sizeof(status));
     if (rc) {
         LOG_ERR("EXT_POWER settings: save failed (%d)", rc);
     } else {
@@ -59,10 +61,12 @@ int ext_power_save_state(void) {
 #if IS_ENABLED(CONFIG_SETTINGS)
     if (!ext_power_persist_enabled) {
         LOG_DBG("EXT_POWER settings: skipping save (non-persistent change)");
-        k_work_cancel_delayable(&ext_power_save_work);
         return 0;
     }
 
+    const struct device *ext_power = DEVICE_DT_GET(DT_DRV_INST(0));
+    struct ext_power_generic_data *data = ext_power->data;
+    data->pending_save_status = data->status;
     int ret = k_work_reschedule(&ext_power_save_work, K_MSEC(CONFIG_ZMK_SETTINGS_SAVE_DEBOUNCE));
     LOG_INF("EXT_POWER settings: schedule save in %d ms (ret=%d)",
             CONFIG_ZMK_SETTINGS_SAVE_DEBOUNCE, ret);
@@ -122,6 +126,14 @@ int ext_power_disable_with_persist(const struct device *dev, bool persist_state)
     ext_power_persist_enabled = previous;
     return rc;
 }
+
+#if IS_ENABLED(CONFIG_ZMK_TEST_BEHAVIORS) && IS_ENABLED(CONFIG_SETTINGS)
+int zmk_ext_power_test_flush_save(void) {
+    struct k_work_sync sync;
+    k_work_flush_delayable(&ext_power_save_work, &sync);
+    return 0;
+}
+#endif
 
 #if IS_ENABLED(CONFIG_SETTINGS)
 static int ext_power_settings_set_status(const struct device *dev, size_t len,

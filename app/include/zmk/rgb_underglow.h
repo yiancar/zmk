@@ -63,6 +63,16 @@ int zmk_rgb_underglow_change_brt(int direction);
 int zmk_rgb_underglow_change_spd(int direction);
 int zmk_rgb_underglow_set_hsb(struct zmk_led_hsb color);
 
+/**
+ * @brief Temporarily power and render the underglow tick pipeline without changing RGB settings.
+ *
+ * When the configured underglow output is disabled, its pixels remain black so tick listeners can
+ * overlay status indicators. Existing idle and USB auto-off policies still apply. This override is
+ * runtime-only: it is not persisted, does not affect Studio preview state, and does not emit a
+ * state-change notification.
+ */
+int zmk_rgb_underglow_set_output_override(bool enabled);
+
 bool zmk_rgb_underglow_validate_config_values(uint32_t hue, uint32_t saturation,
                                               uint32_t brightness, uint32_t effect, uint32_t speed);
 int zmk_rgb_underglow_get_config(struct zmk_rgb_underglow_config *config);
