@@ -57,8 +57,7 @@ static K_MUTEX_DEFINE(activity_mutex);
 #endif
 
 static int raise_event(enum zmk_activity_state state) {
-    return raise_zmk_activity_state_changed(
-        (struct zmk_activity_state_changed){.state = state});
+    return raise_zmk_activity_state_changed((struct zmk_activity_state_changed){.state = state});
 }
 
 static int set_state_locked(enum zmk_activity_state state) {

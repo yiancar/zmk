@@ -64,8 +64,7 @@ void zmk_studio_core_lock() { set_state(ZMK_STUDIO_CORE_LOCK_STATE_LOCKED); }
 
 #define FACTORY_UNLOCK_SETTINGS_SUBTREE "studio"
 #define FACTORY_UNLOCK_SETTINGS_NAME "factory_unlock_consumed"
-#define FACTORY_UNLOCK_SETTINGS_KEY                                                               \
-    FACTORY_UNLOCK_SETTINGS_SUBTREE "/" FACTORY_UNLOCK_SETTINGS_NAME
+#define FACTORY_UNLOCK_SETTINGS_KEY FACTORY_UNLOCK_SETTINGS_SUBTREE "/" FACTORY_UNLOCK_SETTINGS_NAME
 #define FACTORY_UNLOCK_CONSUMED_VALUE 0xA5
 
 static bool factory_settings_loaded;
@@ -123,8 +122,7 @@ static void factory_unlock_work_handler(struct k_work *work) {
 
     factory_marker_consumed = true;
 
-    if (!zmk_usb_is_hid_ready() ||
-        zmk_endpoint_get_selected().transport != ZMK_TRANSPORT_USB) {
+    if (!zmk_usb_is_hid_ready() || zmk_endpoint_get_selected().transport != ZMK_TRANSPORT_USB) {
         LOG_WRN("USB disconnected while consuming factory unlock marker");
         goto unlock;
     }
@@ -139,15 +137,15 @@ unlock:
 K_WORK_DEFINE(factory_unlock_work, factory_unlock_work_handler);
 
 static void schedule_factory_unlock_if_usb(void) {
-    if (zmk_usb_is_hid_ready() &&
-        zmk_endpoint_get_selected().transport == ZMK_TRANSPORT_USB) {
+    if (zmk_usb_is_hid_ready() && zmk_endpoint_get_selected().transport == ZMK_TRANSPORT_USB) {
         k_work_submit(&factory_unlock_work);
     }
 }
 
 void zmk_studio_core_factory_settings_loaded(int settings_load_result) {
     if (settings_load_result) {
-        LOG_ERR("Settings failed to load; factory unlock remains disabled: %d", settings_load_result);
+        LOG_ERR("Settings failed to load; factory unlock remains disabled: %d",
+                settings_load_result);
         return;
     }
 

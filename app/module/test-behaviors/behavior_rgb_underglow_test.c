@@ -348,8 +348,8 @@ static void test_usb_powered_sleep_suppression(void) {
 
     passed = zmk_activity_get_state() == ZMK_ACTIVITY_IDLE && passed;
     passed = zmk_rgb_underglow_test_get_output_state(&output) == 0 && !output && passed;
-    passed = zmk_rgb_underglow_get_config(&actual) == 0 && configs_equal(&baseline, &actual) &&
-             passed;
+    passed =
+        zmk_rgb_underglow_get_config(&actual) == 0 && configs_equal(&baseline, &actual) && passed;
 #if IS_ENABLED(CONFIG_SETTINGS_CUSTOM)
     passed = settings_test_storage.write_count == write_count && passed;
 #endif
@@ -472,9 +472,9 @@ static void test_activity_failure_does_not_mutate_preview(void) {
 #endif
 
     fail_next_activity_event = true;
-    passed = invoke_preview_rpc(
-                 (baseline.color.h + 1) % (ZMK_RGB_UNDERGLOW_HUE_MAX + 1), baseline.color.s,
-                 baseline.color.b, baseline.effect, baseline.animation_speed, true) &&
+    passed = invoke_preview_rpc((baseline.color.h + 1) % (ZMK_RGB_UNDERGLOW_HUE_MAX + 1),
+                                baseline.color.s, baseline.color.b, baseline.effect,
+                                baseline.animation_speed, true) &&
              passed;
     passed = zmk_rgb_underglow_get_config(&actual) == 0 && configs_equal(&baseline, &actual) &&
              !zmk_rgb_underglow_has_unsaved_changes() && passed;
@@ -543,8 +543,8 @@ static void test_preview_activity_refresh(void) {
     passed = zmk_rgb_underglow_test_get_output_state(&output) == 0 && !output && passed;
 
     /* A rejected preview must not wake the keyboard or change effective RGB power. */
-    passed = invoke_preview_rpc(ZMK_RGB_UNDERGLOW_HUE_MAX + 1U, preview.color.s,
-                                preview.color.b, preview.effect, preview.animation_speed, true) &&
+    passed = invoke_preview_rpc(ZMK_RGB_UNDERGLOW_HUE_MAX + 1U, preview.color.s, preview.color.b,
+                                preview.effect, preview.animation_speed, true) &&
              passed;
     passed = zmk_activity_get_state() == ZMK_ACTIVITY_IDLE && passed;
     passed = zmk_rgb_underglow_test_get_output_state(&output) == 0 && !output && passed;
