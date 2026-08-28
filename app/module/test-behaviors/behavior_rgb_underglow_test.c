@@ -13,8 +13,13 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/settings/settings.h>
+#if IS_ENABLED(CONFIG_ZMK_TEST_POWEROFF_STUB)
+#include <zephyr/sys/poweroff.h>
+#endif
 
 #include <drivers/behavior.h>
+#include <zmk/activity.h>
+#include <zmk/events/activity_state_changed.h>
 #include <zmk/rgb_underglow.h>
 
 #if IS_ENABLED(CONFIG_ZMK_STUDIO_RPC) || IS_ENABLED(CONFIG_ZMK_TEST_STUDIO_LIGHTING)
@@ -22,6 +27,13 @@
 #endif
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
+
+#if IS_ENABLED(CONFIG_ZMK_TEST_POWEROFF_STUB)
+__weak FUNC_NORETURN void z_sys_poweroff(void) {
+    k_panic();
+    CODE_UNREACHABLE;
+}
+#endif
 
 extern int zmk_rgb_underglow_test_set_auto_off_idle(bool active);
 extern int zmk_rgb_underglow_test_set_auto_off_usb(bool active);
@@ -319,6 +331,38 @@ static void test_effective_output(void) {
     log_result("effective-output", passed);
 }
 
+#if IS_ENABLED(CONFIG_ZMK_TEST_ACTIVITY) && IS_ENABLED(CONFIG_ZMK_SLEEP)
+static void test_usb_powered_sleep_suppression(void) {
+    struct zmk_rgb_underglow_config baseline;
+    struct zmk_rgb_underglow_config actual;
+    bool output = false;
+
+    bool passed = zmk_rgb_underglow_get_config(&baseline) == 0 && baseline.on;
+#if IS_ENABLED(CONFIG_SETTINGS_CUSTOM)
+    uint32_t write_count = settings_test_storage.write_count;
+#endif
+
+    zmk_activity_test_set_usb_power_present(true);
+    zmk_activity_test_set_inactive_time(CONFIG_ZMK_IDLE_SLEEP_TIMEOUT + 1);
+    zmk_activity_test_run_work();
+
+    passed = zmk_activity_get_state() == ZMK_ACTIVITY_IDLE && passed;
+    passed = zmk_rgb_underglow_test_get_output_state(&output) == 0 && !output && passed;
+    passed = zmk_rgb_underglow_get_config(&actual) == 0 && configs_equal(&baseline, &actual) &&
+             passed;
+#if IS_ENABLED(CONFIG_SETTINGS_CUSTOM)
+    passed = settings_test_storage.write_count == write_count && passed;
+#endif
+
+    passed = zmk_activity_note_activity() == 0 && passed;
+    passed = zmk_activity_get_state() == ZMK_ACTIVITY_ACTIVE && passed;
+    passed = zmk_rgb_underglow_test_get_output_state(&output) == 0 && output && passed;
+    zmk_activity_test_set_usb_power_present(false);
+
+    log_result("usb-sleep-suppression", passed);
+}
+#endif
+
 #if IS_ENABLED(CONFIG_ZMK_STUDIO_RPC) || IS_ENABLED(CONFIG_ZMK_TEST_STUDIO_LIGHTING)
 static bool rpc_response_is_error(const zmk_studio_Response *response) {
     return response->which_type == zmk_studio_Response_request_response_tag &&
@@ -327,8 +371,24 @@ static bool rpc_response_is_error(const zmk_studio_Response *response) {
                zmk_meta_Response_simple_error_tag;
 }
 
+static bool fail_next_activity_event;
+
+static int activity_failure_test_listener(const zmk_event_t *eh) {
+    if (!as_zmk_activity_state_changed(eh)) {
+        return -ENOTSUP;
+    }
+    if (fail_next_activity_event) {
+        fail_next_activity_event = false;
+        return -EIO;
+    }
+    return ZMK_EV_EVENT_BUBBLE;
+}
+
+ZMK_LISTENER(activity_failure_test, activity_failure_test_listener);
+ZMK_SUBSCRIPTION(activity_failure_test, zmk_activity_state_changed);
+
 static bool invoke_preview_rpc(uint32_t hue, uint32_t saturation, uint32_t brightness,
-                               uint32_t effect, uint32_t speed) {
+                               uint32_t effect, uint32_t speed, bool expect_error) {
     zmk_studio_Request request = zmk_studio_Request_init_zero;
     request.which_subsystem = zmk_studio_Request_lighting_tag;
     request.subsystem.lighting.which_request_type = zmk_lighting_Request_set_preview_state_tag;
@@ -347,7 +407,7 @@ static bool invoke_preview_rpc(uint32_t hue, uint32_t saturation, uint32_t brigh
         if (handler->subsystem_choice == zmk_studio_Request_lighting_tag &&
             handler->request_choice == zmk_lighting_Request_set_preview_state_tag) {
             zmk_studio_Response response = handler->func(&request);
-            return rpc_response_is_error(&response);
+            return rpc_response_is_error(&response) == expect_error;
         }
     }
 
@@ -386,13 +446,120 @@ static void test_rpc_validation(void) {
     for (size_t i = 0; i < ARRAY_SIZE(invalid_values); i++) {
         passed =
             invoke_preview_rpc(invalid_values[i][0], invalid_values[i][1], invalid_values[i][2],
-                               invalid_values[i][3], invalid_values[i][4]) &&
+                               invalid_values[i][3], invalid_values[i][4], true) &&
             passed;
         passed = zmk_rgb_underglow_get_config(&actual) == 0 && configs_equal(&baseline, &actual) &&
                  !zmk_rgb_underglow_has_unsaved_changes() && passed;
     }
 
     log_result("rpc-validation", passed);
+}
+
+#if IS_ENABLED(CONFIG_ZMK_TEST_ACTIVITY)
+static void test_activity_failure_does_not_mutate_preview(void) {
+    struct zmk_rgb_underglow_config baseline;
+    struct zmk_rgb_underglow_config actual;
+    bool output = false;
+
+    zmk_activity_test_set_usb_power_present(true);
+    zmk_activity_test_set_inactive_time(CONFIG_ZMK_IDLE_TIMEOUT + 1);
+    zmk_activity_test_run_work();
+
+    bool passed = zmk_activity_get_state() == ZMK_ACTIVITY_IDLE;
+    passed = zmk_rgb_underglow_get_config(&baseline) == 0 && passed;
+#if IS_ENABLED(CONFIG_SETTINGS_CUSTOM)
+    uint32_t write_count = settings_test_storage.write_count;
+#endif
+
+    fail_next_activity_event = true;
+    passed = invoke_preview_rpc(
+                 (baseline.color.h + 1) % (ZMK_RGB_UNDERGLOW_HUE_MAX + 1), baseline.color.s,
+                 baseline.color.b, baseline.effect, baseline.animation_speed, true) &&
+             passed;
+    passed = zmk_rgb_underglow_get_config(&actual) == 0 && configs_equal(&baseline, &actual) &&
+             !zmk_rgb_underglow_has_unsaved_changes() && passed;
+    passed = zmk_activity_get_state() == ZMK_ACTIVITY_IDLE && passed;
+    passed = zmk_rgb_underglow_test_get_output_state(&output) == 0 && !output && passed;
+#if IS_ENABLED(CONFIG_SETTINGS_CUSTOM)
+    passed = settings_test_storage.write_count == write_count && passed;
+#endif
+
+    zmk_rgb_underglow_test_set_auto_off_idle(false);
+    zmk_activity_test_set_usb_power_present(false);
+    log_result("activity-failure-atomic", passed);
+}
+#endif
+
+static bool wait_for_activity_state(enum zmk_activity_state expected, int32_t timeout_ms) {
+    int64_t deadline = k_uptime_get() + timeout_ms;
+    while (k_uptime_get() < deadline) {
+        if (zmk_activity_get_state() == expected) {
+            return true;
+        }
+        k_sleep(K_MSEC(25));
+    }
+    return zmk_activity_get_state() == expected;
+}
+
+static void test_preview_activity_refresh(void) {
+    struct zmk_rgb_underglow_config baseline;
+    struct zmk_rgb_underglow_config preview;
+    struct zmk_rgb_underglow_config actual;
+    bool output = false;
+
+    bool passed = zmk_rgb_underglow_test_set_auto_off_idle(false) == 0;
+    passed = zmk_rgb_underglow_discard_preview() == 0 && passed;
+    passed = zmk_rgb_underglow_get_config(&baseline) == 0 && baseline.on && passed;
+
+    /* Flush any older physical delayed save before measuring preview persistence. */
+    passed = zmk_rgb_underglow_preview_config(&baseline) == 0 && passed;
+    passed = zmk_rgb_underglow_discard_preview() == 0 && passed;
+#if IS_ENABLED(CONFIG_SETTINGS_CUSTOM)
+    uint32_t write_count = settings_test_storage.write_count;
+#endif
+
+    passed = zmk_activity_note_activity() == 0 && passed;
+    passed = wait_for_activity_state(ZMK_ACTIVITY_IDLE, CONFIG_ZMK_IDLE_TIMEOUT + 1500) && passed;
+    passed = zmk_rgb_underglow_test_get_output_state(&output) == 0 && !output && passed;
+
+    preview = baseline;
+    preview.color.h = (preview.color.h + 1) % (ZMK_RGB_UNDERGLOW_HUE_MAX + 1);
+    passed = invoke_preview_rpc(preview.color.h, preview.color.s, preview.color.b, preview.effect,
+                                preview.animation_speed, false) &&
+             passed;
+    passed = zmk_activity_get_state() == ZMK_ACTIVITY_ACTIVE && passed;
+    passed = zmk_rgb_underglow_test_get_output_state(&output) == 0 && output && passed;
+
+    /* Repeated previews arrive faster than idle expiry and must keep the keyboard active. */
+    for (int i = 0; i < 4; i++) {
+        k_sleep(K_MSEC(CONFIG_ZMK_IDLE_TIMEOUT / 3));
+        passed = zmk_activity_get_state() == ZMK_ACTIVITY_ACTIVE && passed;
+        passed = invoke_preview_rpc(preview.color.h, preview.color.s, preview.color.b,
+                                    preview.effect, preview.animation_speed, false) &&
+                 passed;
+    }
+
+    passed = wait_for_activity_state(ZMK_ACTIVITY_IDLE, CONFIG_ZMK_IDLE_TIMEOUT + 1500) && passed;
+    passed = zmk_rgb_underglow_test_get_output_state(&output) == 0 && !output && passed;
+
+    /* A rejected preview must not wake the keyboard or change effective RGB power. */
+    passed = invoke_preview_rpc(ZMK_RGB_UNDERGLOW_HUE_MAX + 1U, preview.color.s,
+                                preview.color.b, preview.effect, preview.animation_speed, true) &&
+             passed;
+    passed = zmk_activity_get_state() == ZMK_ACTIVITY_IDLE && passed;
+    passed = zmk_rgb_underglow_test_get_output_state(&output) == 0 && !output && passed;
+
+    passed = zmk_rgb_underglow_discard_preview() == 0 && passed;
+    passed = zmk_rgb_underglow_get_config(&actual) == 0 && configs_equal(&baseline, &actual) &&
+             !zmk_rgb_underglow_has_unsaved_changes() && passed;
+#if IS_ENABLED(CONFIG_SETTINGS_CUSTOM)
+    passed = settings_test_storage.write_count == write_count && passed;
+#endif
+
+    /* Restore active runtime output without changing the desired or persisted RGB state. */
+    passed = zmk_activity_note_activity() == 0 && passed;
+    passed = zmk_rgb_underglow_test_get_output_state(&output) == 0 && output && passed;
+    log_result("preview-activity", passed);
 }
 #endif
 
@@ -412,8 +579,15 @@ static void run_extended_tests(void *unused1, void *unused2, void *unused3) {
     test_persistence_writes();
 #endif
     test_effective_output();
+#if IS_ENABLED(CONFIG_ZMK_TEST_ACTIVITY) && IS_ENABLED(CONFIG_ZMK_SLEEP)
+    test_usb_powered_sleep_suppression();
+#endif
 #if IS_ENABLED(CONFIG_ZMK_STUDIO_RPC) || IS_ENABLED(CONFIG_ZMK_TEST_STUDIO_LIGHTING)
     test_rpc_validation();
+#if IS_ENABLED(CONFIG_ZMK_TEST_ACTIVITY)
+    test_activity_failure_does_not_mutate_preview();
+#endif
+    test_preview_activity_refresh();
 #endif
 }
 

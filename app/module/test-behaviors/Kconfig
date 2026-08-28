@@ -1,6 +1,15 @@
 config ZMK_TEST_BEHAVIORS
     bool "Include behaviors used for testing purposes"
 
+config ZMK_TEST_ACTIVITY
+    bool "Expose activity controls used by native tests"
+    depends on ZMK_TEST_BEHAVIORS
+
+config ZMK_TEST_POWEROFF_STUB
+    bool "Provide a test-only power-off capability"
+    depends on ZMK_TEST_ACTIVITY
+    select HAS_POWEROFF
+
 config ZMK_TEST_STUDIO_LIGHTING
     bool "Include the Studio lighting RPC handler for native tests"
     depends on ZMK_TEST_BEHAVIORS && ZMK_RGB_UNDERGLOW && SETTINGS

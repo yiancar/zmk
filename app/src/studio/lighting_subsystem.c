@@ -11,6 +11,7 @@
 
 #include <pb_encode.h>
 
+#include <zmk/activity.h>
 #include <zmk/events/rgb_underglow_state_changed.h>
 #include <zmk/rgb_underglow.h>
 #include <zmk/studio/rpc.h>
@@ -166,6 +167,9 @@ static zmk_studio_Response set_preview_state(const zmk_studio_Request *req) {
     }
 
     struct zmk_rgb_underglow_config config = config_from_target_state(request);
+    if (zmk_activity_note_activity() < 0) {
+        return ZMK_RPC_SIMPLE_ERR(GENERIC);
+    }
     if (zmk_rgb_underglow_preview_config(&config) < 0) {
         return ZMK_RPC_SIMPLE_ERR(GENERIC);
     }
