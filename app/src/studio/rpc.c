@@ -224,6 +224,63 @@ static pb_ostream_t pb_ostream_for_tx_buf(struct rpc_tx_context *ctx) {
     return stream;
 }
 
+/*
+ * Notifications are unsolicited and may be raised from latency-sensitive event handlers. Encode
+ * the complete frame first, then enqueue it only if it fits. This keeps a disconnected or unread
+ * transport from blocking keyboard input and never leaves a partial notification in the TX ring.
+ */
+static int send_notification(const zmk_studio_Response *resp) {
+    uint8_t payload[CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE];
+    uint8_t frame[2 * CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE + 2];
+    pb_ostream_t stream = pb_ostream_from_buffer(payload, sizeof(payload));
+
+    if (!pb_encode(&stream, &zmk_studio_Response_msg, resp)) {
+        return -EMSGSIZE;
+    }
+
+    size_t frame_len = 0;
+    frame[frame_len++] = FRAMING_SOF;
+    for (size_t i = 0; i < stream.bytes_written; i++) {
+        switch (payload[i]) {
+        case FRAMING_EOF:
+        case FRAMING_ESC:
+        case FRAMING_SOF:
+            frame[frame_len++] = FRAMING_ESC;
+        default:
+            frame[frame_len++] = payload[i];
+            break;
+        }
+    }
+    frame[frame_len++] = FRAMING_EOF;
+
+    int err = k_mutex_lock(&rpc_transport_mutex, K_NO_WAIT);
+    if (err < 0) {
+        return err;
+    }
+
+    if (!selected_transport) {
+        goto exit;
+    }
+
+    if (ring_buf_space_get(&rpc_tx_buf) < frame_len) {
+        err = -ENOSPC;
+        goto exit;
+    }
+
+    if (ring_buf_put(&rpc_tx_buf, frame, frame_len) != frame_len) {
+        err = -EIO;
+        goto exit;
+    }
+
+    void *transport_user_data =
+        selected_transport->tx_user_data ? selected_transport->tx_user_data() : NULL;
+    selected_transport->tx_notify(&rpc_tx_buf, frame_len, true, transport_user_data);
+
+exit:
+    k_mutex_unlock(&rpc_transport_mutex);
+    return err;
+}
+
 static int send_response(const zmk_studio_Response *resp) {
     int err = 0;
     k_mutex_lock(&rpc_transport_mutex, K_FOREVER);
@@ -378,7 +435,12 @@ static int studio_rpc_listener_cb(const zmk_event_t *eh) {
         zmk_studio_Response resp = zmk_studio_Response_init_zero;
         resp.which_type = zmk_studio_Response_notification_tag;
         resp.type.notification = rpc_notify->notification;
-        send_response(&resp);
+        int err = send_notification(&resp);
+        if (err == -ENOSPC || err == -EBUSY) {
+            LOG_DBG("Dropped RPC notification under TX backpressure");
+        } else if (err < 0) {
+            LOG_WRN("Failed to send RPC notification: %d", err);
+        }
         return ZMK_EV_EVENT_BUBBLE;
     }
 

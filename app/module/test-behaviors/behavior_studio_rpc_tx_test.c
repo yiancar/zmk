@@ -31,6 +31,7 @@ static uint8_t response_buffer[TEST_RESPONSE_BUFFER_SIZE];
 static size_t response_len;
 static size_t raw_response_len;
 static bool saw_escaped_byte;
+static bool drain_enabled;
 
 static void validate_response(void) {
     zmk_studio_Response response = zmk_studio_Response_init_zero;
@@ -100,7 +101,7 @@ static void test_tx_notify(struct ring_buf *tx_buf, size_t added, bool message_d
     ARG_UNUSED(tx_buf);
     ARG_UNUSED(user_data);
 
-    if (added > 0 || message_done) {
+    if (drain_enabled && (added > 0 || message_done)) {
         k_work_reschedule(&drain_tx_work, K_NO_WAIT);
     }
 }
@@ -152,11 +153,37 @@ static int send_test_request(void) {
     return 0;
 }
 
+static void test_notification_backpressure(void) {
+    struct ring_buf *tx_buf = zmk_rpc_get_tx_buf();
+    uint8_t marker = 0xEE;
+
+    while (ring_buf_space_get(tx_buf) > 1) {
+        ring_buf_put(tx_buf, &marker, 1);
+    }
+    uint32_t size_before = ring_buf_size_get(tx_buf);
+
+    zmk_studio_Notification notification =
+        ZMK_RPC_NOTIFICATION(core, lock_state_changed, ZMK_STUDIO_CORE_LOCK_STATE_LOCKED);
+    int64_t started_at = k_uptime_get();
+    raise_zmk_studio_rpc_notification(
+        (struct zmk_studio_rpc_notification){.notification = notification});
+    int64_t elapsed = k_uptime_get() - started_at;
+
+    bool passed = elapsed < CONFIG_ZMK_STUDIO_RPC_TX_TIMEOUT_MS / 2 &&
+                  ring_buf_size_get(tx_buf) == size_before;
+    LOG_INF("Studio RPC notification backpressure: %s", passed ? "PASS" : "FAIL");
+
+    ring_buf_reset(tx_buf);
+    zmk_rpc_tx_notify_space_available();
+    drain_enabled = true;
+}
+
 static int on_binding_pressed(struct zmk_behavior_binding *binding,
                               struct zmk_behavior_binding_event event) {
     ARG_UNUSED(binding);
     ARG_UNUSED(event);
 
+    test_notification_backpressure();
     int err = send_test_request();
     if (err < 0) {
         LOG_ERR("Failed to send Studio RPC streaming test request: %d", err);
