@@ -27,6 +27,18 @@ config ZMK_STUDIO_LOCK_ON_DISCONNECT
     bool "Lock On Disconnect"
     default y
 
+config ZMK_STUDIO_FACTORY_UNLOCK_ONCE
+    bool "Allow one automatic USB unlock for factory testing"
+    default n
+    depends on SETTINGS
+    depends on ZMK_USB
+    depends on ZMK_STUDIO_TRANSPORT_UART
+    help
+      Allow Studio to unlock automatically over USB exactly once for factory
+      qualification. The firmware first persists a consumed marker in settings;
+      any missing, malformed, or unwritable marker fails closed. Do not enable
+      this option in general-distribution firmware.
+
 endif
 
 menuconfig ZMK_STUDIO_RPC

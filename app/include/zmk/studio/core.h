@@ -29,3 +29,8 @@ void zmk_studio_core_initiate_unlock();
 void zmk_studio_core_complete_unlock();
 
 void zmk_studio_core_reschedule_lock_timeout();
+
+#if IS_ENABLED(CONFIG_ZMK_STUDIO_FACTORY_UNLOCK_ONCE)
+void zmk_studio_core_factory_settings_loaded(int settings_load_result);
+void zmk_studio_core_factory_cancel_unlock();
+#endif

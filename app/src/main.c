@@ -12,6 +12,10 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(zmk, CONFIG_ZMK_LOG_LEVEL);
 
+#if IS_ENABLED(CONFIG_ZMK_STUDIO_FACTORY_UNLOCK_ONCE)
+#include <zmk/studio/core.h>
+#endif
+
 #if IS_ENABLED(CONFIG_ZMK_DISPLAY)
 
 #include <zmk/display.h>
@@ -23,8 +27,16 @@ int main(void) {
     LOG_INF("Welcome to ZMK!\n");
 
 #if IS_ENABLED(CONFIG_SETTINGS)
+#if IS_ENABLED(CONFIG_ZMK_STUDIO_FACTORY_UNLOCK_ONCE)
+    int settings_load_result = settings_subsys_init();
+    if (!settings_load_result) {
+        settings_load_result = settings_load();
+    }
+    zmk_studio_core_factory_settings_loaded(settings_load_result);
+#else
     settings_subsys_init();
     settings_load();
+#endif
 #endif
 
 #ifdef CONFIG_ZMK_DISPLAY

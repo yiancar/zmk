@@ -1,0 +1,8 @@
+# Copyright (c) 2026 Yiancar
+# SPDX-License-Identifier: MIT
+
+name: studio-factory-unlock-once
+append:
+  DTS_EXTRA_CPPFLAGS: -DZMK_BEHAVIORS_KEEP_ALL
+  EXTRA_DTC_OVERLAY_FILE: studio-factory-unlock-once.overlay
+  EXTRA_CONF_FILE: studio-factory-unlock-once.conf

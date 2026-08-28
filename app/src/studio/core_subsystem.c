@@ -63,6 +63,18 @@ zmk_studio_Response get_lock_state(const zmk_studio_Request *req) {
     return CORE_RESPONSE(get_lock_state, resp);
 }
 
+zmk_studio_Response lock(const zmk_studio_Request *req) {
+    LOG_DBG("");
+#if IS_ENABLED(CONFIG_ZMK_STUDIO_FACTORY_UNLOCK_ONCE)
+    zmk_studio_core_factory_cancel_unlock();
+#endif
+#if IS_ENABLED(CONFIG_ZMK_STUDIO_LOCKING)
+    zmk_studio_core_lock();
+#endif
+
+    return ZMK_RPC_NO_RESPONSE();
+}
+
 zmk_studio_Response reset_settings(const zmk_studio_Request *req) {
     LOG_DBG("");
     ZMK_RPC_SUBSYSTEM_SETTINGS_RESET_FOREACH(sub) {
@@ -78,6 +90,7 @@ zmk_studio_Response reset_settings(const zmk_studio_Request *req) {
 
 ZMK_RPC_SUBSYSTEM_HANDLER(core, get_device_info, ZMK_STUDIO_RPC_HANDLER_UNSECURED);
 ZMK_RPC_SUBSYSTEM_HANDLER(core, get_lock_state, ZMK_STUDIO_RPC_HANDLER_UNSECURED);
+ZMK_RPC_SUBSYSTEM_HANDLER(core, lock, ZMK_STUDIO_RPC_HANDLER_UNSECURED);
 ZMK_RPC_SUBSYSTEM_HANDLER(core, reset_settings, ZMK_STUDIO_RPC_HANDLER_SECURED);
 
 static int core_event_mapper(const zmk_event_t *eh, zmk_studio_Notification *n) {
