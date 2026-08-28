@@ -6,6 +6,7 @@ RGB transaction wide-validation: PASS
 RGB transaction auto-off-save: PASS
 RGB transaction persistence: PASS
 RGB transaction effective-output: PASS
+RGB transaction output-override: PASS
 RGB transaction usb-sleep-suppression: PASS
 RGB transaction rpc-validation: PASS
 RGB transaction activity-failure-atomic: PASS
