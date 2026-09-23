@@ -62,11 +62,18 @@ with an onboard MCU or one that uses an MCU board add-on.
     You can build ZMK with the following:
 
     ```sh
-    west build -b proton_c -- -DSHIELD=kyria_left
+    west build -b proton_c//zmk -- -DSHIELD=kyria_left
     ```
 
   </TabItem>
 </Tabs>
+
+:::warning
+Since moving to Zephyr 4.1, the board IDs for boards in ZMK need to use the ZMK board
+variants. E.g. instead of `planck_rev6` it should be `planck//zmk`. Read more about
+board variants in the
+[Zephyr 4.1 Update](https://zmk.dev/blog/2025/12/09/zephyr-4-1#zmk-board-variant) blog post.
+:::
 
 ### CMake Arguments
 
